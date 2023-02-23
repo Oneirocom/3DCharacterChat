@@ -1,10 +1,4 @@
 import * as THREE from "three";
-import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter";
-import { Buffer } from "buffer";
-import html2canvas from "html2canvas";
-import VRMExporter from "./VRMExporter";
-import { CullHiddenFaces } from './cull-mesh.js';
-import { combine } from "./merge-geometry";
 import { VRMLoaderPlugin } from "@pixiv/three-vrm"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
 import { VRMHumanBoneName } from "@pixiv/three-vrm";
@@ -14,23 +8,6 @@ export function getAsArray(target) {
   return Array.isArray(target) ? target : [target]
 }
 
-export async function prepareModel(templateInfo){
-  // check the local storage for a JSON of the model
-  // if it exists, load it
-
-  // if it doesn't exist, fetch the first trait for each category from the server
-  // grab the first trait for each category
-  const traits = templateInfo.traits.map((category) => {
-    return category.traits[0]
-  })
-
-  const returnedTraits = await Promise.all(traits.map((trait) => {
-    return loadModel(trait)
-  }));
-}
-
-
-
 export async function loadModel(file, onProgress) {
   const gltfLoader = new GLTFLoader()
   gltfLoader.register((parser) => {
@@ -38,197 +15,13 @@ export async function loadModel(file, onProgress) {
   })
   return gltfLoader.loadAsync(file, onProgress).then((model) => {
     const vrm = model.userData.vrm
-    renameVRMBones(vrm)
+    // renameVRMBones(vrm)
 
     vrm.scene?.traverse((child) => {
       child.frustumCulled = false
     })
     return vrm
   })
-}
-
-export const cullHiddenMeshes = (avatar) => {
-  const models = []
-  for (const property in avatar) {
-    const vrm = avatar[property].vrm
-    if (vrm) {
-      const cullLayer = vrm.data.cullingLayer
-      if (cullLayer >= 0) { 
-        vrm.data.cullingMeshes.map((mesh)=>{
-          mesh.userData.cullLayer = cullLayer
-          mesh.userData.cullDistance = vrm.data.cullingDistance
-          models.push(mesh)
-        })
-      }
-    }
-  }
-  CullHiddenFaces(models)
-}
-
-export async function getModelFromScene(avatarScene, format = 'glb', skinColor = new THREE.Color(1, 1, 1)) {
-  if (format && format === 'glb') {
-    const exporter = new GLTFExporter();
-    const options = {
-      trs: false,
-      onlyVisible: true,
-      truncateDrawRange: true,
-      binary: true,
-      forcePowerOfTwoTextures: false,
-      maxTextureSize: 1024 || Infinity
-    };
-
-    const avatar = await combine({ transparentColor: skinColor, avatar: avatarScene });
-
-    const glb = await new Promise((resolve) => exporter.parse(avatar, resolve, (error) => console.error("Error getting model", error), options));
-    return new Blob([glb], { type: 'model/gltf-binary' });
-  } else if (format && format === 'vrm') {
-    const exporter = new VRMExporter();
-    const vrm = await new Promise((resolve) => exporter.parse(avatarScene, resolve));
-    return new Blob([vrm], { type: 'model/gltf-binary' });
-  } else {
-    return console.error("Invalid format");
-  }
-}
-
-export async function getScreenShot(elementId, delay = 0) {
-  await new Promise(resolve => setTimeout(resolve, delay));
-  return await getScreenShotByElementId(elementId);
-}
-
-export async function getCroppedScreenshot(elementId, posX, posY, width, height, debug = false){
-  const snapShotElement = document.getElementById(elementId);
-  return await html2canvas(snapShotElement).then(async function (canvas) {
-
-    var dataURL = canvas.toDataURL("image/jpeg", 1.0);
-
-    const tempcanvas = document.createElement("canvas");
-    tempcanvas.width = width;
-    tempcanvas.height = height;
-    const tempctx = tempcanvas.getContext("2d");
-
-    let image = new Image();
-    image.src = dataURL;
-
-    await tempctx.drawImage(canvas, posX, posY, width, height, 0,0, width, height)
-
-    var newdataurl = tempcanvas.toDataURL("image/jpeg", 1.0);
-    const base64Data = Buffer.from(
-      newdataurl.replace(/^data:image\/\w+;base64,/, ""),
-      "base64"
-    );
-
-
-    const blob = new Blob([base64Data], { type: "image/jpeg" });
-
-    if (debug){
-      const link = document.createElement("a")
-      link.style.display = "none"
-      document.body.appendChild(link)
-      link.href = URL.createObjectURL(blob)
-      link.download = "test.jpeg"
-      link.click()
-    }
-
-    return blob;
-  });
-}
-
-async function getScreenShotByElementId(id) {
-
-  const snapShotElement = document.getElementById(id);
-  return await html2canvas(snapShotElement).then(async function (canvas) {
-
-    var dataURL = canvas.toDataURL("image/jpeg", 1.0);
-    // const base64Data = Buffer.from(
-    //   dataURL.replace(/^data:image\/\w+;base64,/, ""),
-    //   "base64"
-    // );
-
-    const tempcanvas = document.createElement("canvas");
-    tempcanvas.width = 256;
-    tempcanvas.height = 256;
-    const tempctx = tempcanvas.getContext("2d");
-
-    let image = new Image();
-    image.src = dataURL;
-
-    //const ctx = canvas.getContext("2d")
-    await tempctx.drawImage(canvas, 500, 100, 256, 256, 0,0, 256, 256)
-
-    var newdataurl = tempcanvas.toDataURL("image/jpeg", 1.0);
-    const base64Data = Buffer.from(
-      newdataurl.replace(/^data:image\/\w+;base64,/, ""),
-      "base64"
-    );
-
-
-    const blob = new Blob([base64Data], { type: "image/jpeg" });
-
-    const link = document.createElement("a")
-    link.style.display = "none"
-    document.body.appendChild(link)
-    link.href = URL.createObjectURL(blob)
-    link.download = "test.jpeg"
-    link.click()
-
-    return blob;
-  });
-}
-function createSpecifiedImage(ctx){
-  const context = createContext(256,256);
-  const imageData = ctx.getImageData(left, top, width, height);
-  const arr = new ImageData(imageData, xTileSize, yTileSize);
-  const tempcanvas = document.createElement("canvas");
-  tempcanvas.width = xTileSize;
-  tempcanvas.height = yTileSize;
-  const tempctx = tempcanvas.getContext("2d");
-
-  tempctx.putImageData(arr, 0, 0);
-  tempctx.save();
-  // draw tempctx onto context
-  context.drawImage(tempcanvas, min.x * ATLAS_SIZE_PX, min.y * ATLAS_SIZE_PX, xTileSize, yTileSize);
-
-}
-
-function createContext({ width, height }) {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  context.fillStyle = "white";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  return context;
-}
-
-export async function getSkinColor(scene, targets) {
-  for (const target of targets) {
-    const object = scene.getObjectByName(target);
-    if (object != null) {
-      if (object.isGroup) {
-        const child = object.children[0];
-        const mat = child.material.length ? child.material[0] : child.material;
-        if (mat.uniforms != null) {
-          return mat.uniforms.litFactor.value;
-        }
-      }
-      else {
-        const mat = object.material.length ? object.material[0] : object.material;
-        if (mat.uniforms != null) {
-          return mat.uniforms.litFactor.value;
-        }
-      }
-    }
-  }
-}
-
-export async function setMaterialColor(scene, value, target) {
-  const object = scene.getObjectByName(target);
-  const randColor = value;
-  const skinShade = new THREE.Color(randColor).convertLinearToSRGB();
-  const mat = object.material.length ? object.material[0] : object.material;
-  mat.uniforms.litFactor.value.set(skinShade);
-  const hslSkin = { h: 0, s: 0, l: 0 };
-  skinShade.getHSL(hslSkin);
 }
 
 //make sure to remove this data when downloading, as this data is only required while in edit mode

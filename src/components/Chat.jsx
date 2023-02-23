@@ -1,7 +1,6 @@
 import React, { useEffect } from "react"
 import axios from "axios"
-import { voices } from "../constants/voices"
-import { SceneContext } from "../context/SceneContext"
+import { SceneContext } from "./SceneContext"
 import styles from "./Chat.module.css"
 import CustomButton from "./custom-button"
 
@@ -9,7 +8,42 @@ import {
   sepiaSpeechRecognitionInit,
   SepiaSpeechRecognitionConfig,
 } from "sepia-speechrecognition-polyfill"
-import { pruneMessages } from "../lib/chat"
+
+const voices = {
+  'Female 1': '1QnOliOAmerMUNuo2wXoH-YoainoSjZen',
+  'Female 2': '132G6oD0HHPPn4t1H6IkYv18_F0UVLWgi',
+  'Female 3': '1CdYZ2r52mtgJsFs88U0ZViMSnzpQ_HRp',
+  'Male 1': '17MQWS6m6VKkiU9KWRNGbTemZ0fIBKm0O',
+  'Male 2': '1AwNZizuEmCgmnpAlqGLXWh_mvTm6OLbM',
+  'Male 3': '1TKFdmFLttjjzByj2fZW8J70ZHjR-RTwc',
+  'Robot': '1NwpxG6kQ5lxwjPyuZTR0M9qc_7bMqPUH',
+}
+
+// Constants
+
+const messagesMaxCharacters = 20000
+
+// Prune Messages Function
+
+export async function pruneMessages(messages) {
+  let currentSize = 0
+  const newMessages = []
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+
+    currentSize += message.length
+
+    // Add up to N characters.
+    if (currentSize < messagesMaxCharacters) newMessages.push(message)
+    else break
+  }
+
+  // Reverse the array so that the newest messages are first.
+  newMessages.reverse()
+
+  return newMessages
+}
 
 const sessionId =
   localStorage.getItem("sessionId") ??
@@ -24,22 +58,11 @@ const defaultSpeaker = "Speaker"
 const SpeechRecognition =
   window.webkitSpeechRecognition || sepiaSpeechRecognitionInit(config)
 
-export default function ChatBox({templateInfo, micEnabled, setMicEnabled, speechRecognition, setSpeechRecognition}) {
+export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, setSpeechRecognition}) {
   const [waitingForResponse, setWaitingForResponse] = React.useState(false)
 
-  const fullBioStr = localStorage.getItem(`${templateInfo.id}_fulBio`)
-  const fullBio = JSON.parse(fullBioStr)
-
-  const name = fullBio.name
-  const bio = fullBio.description
-  const voice = fullBio.voiceKey
-  const greeting = fullBio.greeting
-  const question1 = fullBio.personality.question
-  const question2 = fullBio.relationship.question
-  const question3 = fullBio.hobbies.question
-  const response1 = fullBio.personality.answer
-  const response2 = fullBio.relationship.answer
-  const response3 = fullBio.hobbies.answer
+  const name = "Eliza"
+  const voice = voices["Female 1"]
 
   const [speaker, setSpeaker] = React.useState(
     localStorage.getItem("speaker") || defaultSpeaker,
@@ -49,21 +72,6 @@ export default function ChatBox({templateInfo, micEnabled, setMicEnabled, speech
   useEffect(() => {
     localStorage.setItem("speaker", speaker)
   }, [speaker])
-
-  function composePrompt() {
-    const prompt = `Name: ${name}
-Bio: ${bio}
-${speaker}: Hey ${name}
-${name}: ${greeting}
-${speaker}: ${question1}
-${name}: ${response1}
-${speaker}: ${question2}
-${name}: ${response2}
-${speaker}: ${question3}
-${name}: ${response3}`
-
-    return prompt
-  }
 
   const { lipSync } = React.useContext(SceneContext)
   const [input, setInput] = React.useState("")
@@ -127,7 +135,8 @@ ${name}: ${response3}`
     if (value && !waitingForResponse) {
       // Send the message to the localhost endpoint
       const agent = name
-      // const spell_handler = "charactercreator";
+      const spell_handler = "eliza3d";
+      const projectId = 'ok'
 
       //const newMessages = await pruneMessages(messages);
 
@@ -141,44 +150,9 @@ ${name}: ${response3}`
       promptMessages.push(`${speaker}: ${value}`)
 
       try {
-        // const url = encodeURI(`http://216.153.52.197:8001/spells/${spell_handler}`)
+        const url = encodeURI(`https://magick.herokuapp.com/spells/${spell_handler}?projectId=${projectId}`)
 
-        const endpoint = "https://upstreet.webaverse.com/api/ai"
-        
-        let prompt = `The following is part of a conversation between ${speaker} and ${agent}. ${agent} is descriptive and helpful, and is honest when it doesn't know an answer. Included is a context which acts a short-term memory, used to guide the conversation and track topics.
-
-CONTEXT:
-
-Info about ${agent}
----
-
-Bio: "${bio}"
-
-Question 1: "${question1}"
-Response 1: "${response1}"
-
-Question 2: "${question2}"
-Response 2: "${response2}"
-
-Question 3: "${question3}"
-Response 3: "${response3}"
-
-MOST RECENT MESSAGES:
-
-${promptMessages.join("\n")}
-${agent}:`
-
-        const query = {
-          prompt,
-          max_tokens: 250,
-          temperature: 0.9,
-          top_p: 1,
-          frequency_penalty: 0,
-          presence_penalty: 0.6,
-          stop: [speaker + ":", agent + ":", "\\n"],
-        }
-
-        axios.post(endpoint, query).then((response) => {
+        axios.post(url).then((response) => {
           const output = response.data.choices[0].text
           const ttsEndpoint =
             "https://voice.webaverse.com/tts?" +

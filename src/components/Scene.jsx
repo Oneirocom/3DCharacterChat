@@ -1,21 +1,13 @@
 import React, { useContext, useEffect, useState } from "react"
 import * as THREE from "three"
-import { SceneContext } from "../context/SceneContext"
-import { CameraMode } from "../context/ViewContext"
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
+import { SceneContext } from "./SceneContext"
 
-export default function Scene({sceneModel, lookatManager}) {
-  const {
-    scene,
-    model, setModel,
-    currentCameraMode,
-    setControls,
-    setMousePosition,
-    setCamera,
-  } = useContext(SceneContext)
-  
+export default function Scene({ characterModel }) {
+  const { scene, setMousePosition, setCamera } =
+    useContext(SceneContext)
+
   const handleMouseMove = (event) => {
-    setMousePosition({x: event.x, y: event.y});
+    setMousePosition({ x: event.x, y: event.y })
   }
 
   useEffect(() => {
@@ -32,8 +24,12 @@ export default function Scene({sceneModel, lookatManager}) {
     setIsLoaded(true)
     loaded = true
 
-    scene.add(sceneModel);
-    
+    characterModel.scene.position.set(-.4, .1, 0)
+    // rotate 180 degrees
+    characterModel.scene.rotation.y = Math.PI
+
+    scene.add(characterModel.scene)
+
     // add a camera to the scene
     const camera = new THREE.PerspectiveCamera(
       30,
@@ -43,11 +39,8 @@ export default function Scene({sceneModel, lookatManager}) {
     )
 
     setCamera(camera)
-    lookatManager.setCamera(camera)
     // set the camera position
     camera.position.set(0, 1.3, 2)
-
-    // TODO make sure to kill the interval
 
     // find editor-scene canvas
     const canvasRef = document.getElementById("editor-scene")
@@ -78,51 +71,19 @@ export default function Scene({sceneModel, lookatManager}) {
     // set the renderer output encoding
     renderer.outputEncoding = THREE.sRGBEncoding
 
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.minDistance = 1
-    controls.maxDistance = 4
-    controls.maxPolarAngle = Math.PI / 2
-    controls.enablePan = true
-    controls.target = new THREE.Vector3(0, 1, 0)
-    controls.enableDamping = true
-    controls.dampingFactor = 0.1
-
-    setControls(controls)
-
-    const minPan = new THREE.Vector3(-0.5,0,-0.5);
-    const maxPan = new THREE.Vector3(0.5,1.5,0.5);
-
     // start animation frame loop to render
     const animate = () => {
       requestAnimationFrame(animate)
-      if (currentCameraMode !== CameraMode.AR) {
-        controls.target.clamp(minPan,maxPan)
-        controls?.update()
-        lookatManager.update();
-        renderer.render(scene, camera)
-      }
+      renderer.render(scene, camera)
     }
 
     // start the animation loop
     animate()
 
-    // // create animation manager
-    async function fetchAssets() {
-      if (model != null && scene != null) {
-        scene.remove(model)
-      }
-      // model holds only the elements that will be exported
-      const avatarModel = new THREE.Object3D()
-      setModel(avatarModel)
-
-      scene.add(avatarModel)
-    }
-    fetchAssets()
     return () => {
       removeEventListener("mousemove", handleMouseMove)
       removeEventListener("resize", handleMouseMove)
-      // scene.remove(sceneModel)
-      scene.remove(model)
+      if(characterModel) scene.remove(characterModel)
     }
   }, [])
 

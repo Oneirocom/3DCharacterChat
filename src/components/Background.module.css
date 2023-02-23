@@ -1,5 +1,5 @@
 .backgroundImg {
-    background-image: url('/assets/backgrounds/main-background2.jpg');
+    background-color: black;
     background-attachment: fixed;
     background-repeat: no-repeat;
     background-position: center center;
@@ -16,8 +16,8 @@
 
 
 .Background {
-    background: url('/assets/backgrounds/main-background2.jpg');
-    background-position: center;
+  background-color: black;
+  background-position: center;
     background-repeat: no-repeat;
     background-size: cover;
     overflow: hidden;
