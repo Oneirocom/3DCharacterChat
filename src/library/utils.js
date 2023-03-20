@@ -1,27 +1,8 @@
 import * as THREE from "three";
-import { VRMLoaderPlugin } from "@pixiv/three-vrm"
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import { VRMHumanBoneName } from "@pixiv/three-vrm";
 
 export function getAsArray(target) {
   if (target == null) return []
   return Array.isArray(target) ? target : [target]
-}
-
-export async function loadModel(file, onProgress) {
-  const gltfLoader = new GLTFLoader()
-  gltfLoader.register((parser) => {
-    return new VRMLoaderPlugin(parser)
-  })
-  return gltfLoader.loadAsync(file, onProgress).then((model) => {
-    const vrm = model.userData.vrm
-    // renameVRMBones(vrm)
-
-    vrm.scene?.traverse((child) => {
-      child.frustumCulled = false
-    })
-    return vrm
-  })
 }
 
 //make sure to remove this data when downloading, as this data is only required while in edit mode
@@ -90,7 +71,6 @@ export const createBoneDirection = (skinMesh) => {
   const geometry = skinMesh.geometry;
 
   const pos = geometry.attributes.position.array;
-  //console.log(geometry)
   const normals = geometry.attributes.normal.array;
 
   // set by jumps of 4
@@ -140,7 +120,6 @@ export const createBoneDirection = (skinMesh) => {
         highIdx = bnIdx[idxBnBase + i];
       }
     }
-    //console.log(highIdx)
     //once we have the highest value, we get the bone position to later get the direction
     // now get the vertex 
     const idxPosBase = f * 3;

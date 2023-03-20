@@ -58,9 +58,9 @@ const defaultSpeaker = "Speaker"
 const SpeechRecognition =
   window.webkitSpeechRecognition || sepiaSpeechRecognitionInit(config)
 
-export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, setSpeechRecognition}) {
+export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, setSpeechRecognition, lipSync}) {
   const [waitingForResponse, setWaitingForResponse] = React.useState(false)
-
+  
   const name = "Eliza"
   const voice = voices["Female 1"]
 
@@ -73,7 +73,7 @@ export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, s
     localStorage.setItem("speaker", speaker)
   }, [speaker])
 
-  const { lipSync } = React.useContext(SceneContext)
+  // const { lipSync } = React.useContext(SceneContext)
   const [input, setInput] = React.useState("")
 
   const [messages, setMessages] = React.useState([])
@@ -132,6 +132,7 @@ export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, s
   }
 
   const handleUserChatInput = async (value) => {
+
     if (value && !waitingForResponse) {
       // Send the message to the localhost endpoint
       const agent = name
@@ -142,26 +143,27 @@ export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, s
 
       // newMessages.push(`${speaker}: ${value}`)
 
-      
       setInput("")
       setMessages((messages) => [...messages, `${speaker}: ${value}`])
 
       const promptMessages = await pruneMessages(messages)
       promptMessages.push(`${speaker}: ${value}`)
+      const self = lipSync;
 
       try {
-        const url = encodeURI(`https://magick.herokuapp.com/spells/${spell_handler}?projectId=${projectId}`)
+        // const url = encodeURI(`https://magick.herokuapp.com/spells/${spell_handler}?projectId=${projectId}`)
 
-        axios.post(url).then((response) => {
-          const output = response.data.choices[0].text
-          const ttsEndpoint =
-            "https://voice.webaverse.com/tts?" +
-            "s=" +
-            output +
-            "&voice=" +
-            voices[voice]
+        // axios.post(url).then((response) => {
+        //   const output = response.data.choices[0].text
+          // const ttsEndpoint =
+          //   "https://voice.webaverse.com/tts?" +
+          //   "s=" +
+          //   output +
+          //   "&voice=" +
+          //   voices[voice]
 
           // fetch the audio file from ttsEndpoint
+          const ttsEndpoint = 'https://voice.webaverse.com/tts?s=hello'
 
           fetch(ttsEndpoint).then(async (response) => {
             const blob = await response.blob()
@@ -169,12 +171,12 @@ export default function ChatBox({micEnabled, setMicEnabled, speechRecognition, s
             // convert the blob to an array buffer
             const arrayBuffer = await blob.arrayBuffer()
 
-            lipSync.startFromAudioFile(arrayBuffer);
+            self.startFromAudioFile(arrayBuffer);
+            setMessages((messages) => [...messages, agent + ": " + 'hello'])
           })
 
-          setMessages((messages) => [...messages, agent + ": " + output])
           setWaitingForResponse(false);
-        })
+        // })
       } catch (error) {
         console.error(error)
       }

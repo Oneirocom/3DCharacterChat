@@ -32,8 +32,6 @@ export const SceneProvider = (props) => {
 
   const [lipSync, setLipSync] = useState(null)
 
-  const [mousePosition, setMousePosition] = useState({x: 0, y: 0})
-
   const [isChangingWholeAvatar, setIsChangingWholeAvatar] = useState(false)
 
   const setAvatar = (state) => {
@@ -43,7 +41,7 @@ export const SceneProvider = (props) => {
   return (
     <SceneContext.Provider
       value={{
-        awaitDisplay, 
+        awaitDisplay,
         setAwaitDisplay,
         blinkManager,
         setBlinkManager,
@@ -62,8 +60,6 @@ export const SceneProvider = (props) => {
         avatar,
         setAvatar,
         initializeScene,
-        mousePosition, 
-        setMousePosition,
         isChangingWholeAvatar,
         setIsChangingWholeAvatar,
       }}
