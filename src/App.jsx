@@ -1,71 +1,95 @@
-import React, { Fragment, useContext, useEffect, useState } from "react"
-import * as THREE from "three"
+/* eslint-disable no-unused-vars */
+import React, { Fragment, useEffect, useState, useCallback, useRef, useFrame, Clock } from "react"
 import styles from "./App.module.css"
 import { BlinkManager } from "./library/blinkManager"
 import Chat from "./components/Chat"
-import { loadModel } from "./library/utils"
+import DragDrop from "./components/drag-drop/DragDrop"
 import Scene from "./components/Scene"
 import Background from "./components/Background"
-import {AnimationManager} from "./library/animationManager"
+import { LipSync } from "./library/lipsync"
+import { AnimationMixer } from 'three'
+import * as THREE from 'three'
 
-async function fetchAll() {
-  const characterModel =  await loadModel("/3d/avatar.vrm")
+import { loadVRM, initAnimationMixer } from "./library/animationManager"
 
-  console.log('characterModel is', characterModel)
+let isFirstRender = true
+let characterIsChanged = false
 
-  const blinkManager = new BlinkManager(0.1, 0.1, 0.5, 5)
-  const animationManager = new AnimationManager()
-  await animationManager.loadAnimations("/3d/idle_drophunter.fbx")
-  animationManager.startAnimation(characterModel)
-  blinkManager.addBlinker(characterModel)
-
-  return {
-    characterModel,
-    blinkManager,
-  }
-}
-
-const fetchData = () => {
-  let status, result
-
-  const manifestPromise = fetchAll()
-  // const modelPromise = fetchModel()
-  const suspender = manifestPromise.then(
-    (r) => {
-      status = "success"
-      result = r
-    },
-    (e) => {
-      status = "error"
-      result = e
-    },
-  )
-
-  return {
-    read() {
-      if (status === "error") {
-        throw result
-      } else if (status === "success") {
-        return result
-      }
-      throw suspender
-    },
-  }
-}
-
-const resource = fetchData()
+const animationUrl = '/3d/magic idle.fbx';
+const characterUrl = '/3d/avatar.vrm'
 
 export default function App() {
   const [micEnabled, setMicEnabled] = React.useState(false)
   const [speechRecognition, setSpeechRecognition] = React.useState(false)
-
-  const {
-    characterModel,
-  } = resource.read()
-
   const [hideUi, setHideUi] = useState(false)
+  const [characterModel, setCharacterModel] = React.useState(null)
+  const [lipSync, setLipSync] = React.useState(null)
+
+  const timer = useRef(null)
+
+  const  applyAnimation = async (animationUrl, vrm) => {
+    const mixer = await initAnimationMixer(animationUrl, vrm)
+    const clock = new THREE.Clock();
+    clock.start();
+
+    if (timer.current) {
+      clearInterval(timer.current)
+    }
+
+    timer.current = setInterval(() => {
+      const delta = clock.getDelta();
+  
+      if ( mixer ) {
+        mixer.update( delta );
+      }
+    
+      if ( characterModel ) {
+        characterModel.update( delta );
+      }
+    }, 1000 / 30);
+  }
+  
+  useEffect(() => {
+    if (!isFirstRender) return
+    isFirstRender = false;
+    (async () => {
+      const vrm = await loadVRM(characterUrl)
+      characterIsChanged = true
+      
+      await applyAnimation(animationUrl, vrm)
+      setCharacterModel(vrm)
+    })()
+  }, [])
+
+
+  // Update character model third-party library integrations
+  useEffect(() => {
+    if (!characterIsChanged || !characterModel) return
+    console.log('character is changed')
+    characterIsChanged = false;
+    (async () => {
+      const blinkManager = new BlinkManager(0.1, 0.1, 0.5, 5)
+      blinkManager.addBlinker(characterModel)
+      const newLipSync = new LipSync(characterModel)
+      setLipSync(newLipSync)
+    })()
+  }, [characterModel])
+
+  const onDrop = useCallback((acceptedFiles) => {
+    const file = acceptedFiles[0]
+    if (!file) return
+    (async () => {
+      const reader = new FileReader();
+      const obj = URL.createObjectURL(file)
+      const characterModel = await loadVRM(obj)
+      characterIsChanged = true
+      await applyAnimation(animationUrl, characterModel)
+      setCharacterModel(characterModel);
+    })()
+  }, []);
 
   let lastTap = 0
+
   useEffect(() => {
     const handleTap = (e) => {
       const now = new Date().getTime()
@@ -84,26 +108,29 @@ export default function App() {
     }
   }, [hideUi])
 
+
   return (
     <Fragment>
+      <DragDrop onDrop={onDrop} className={styles.dragdrop} noClick={false} />
       <Background />
-      <Scene
+      {characterModel && <Scene
         characterModel={characterModel}
-      />
+      />}
       <div className={styles.container}>
-      <div className={styles.chatContainer}>
-        <div className={styles.topLine} />
-        <div className={styles.bottomLine} />
-        <div className={styles.scrollContainer}>
-          <Chat
-            micEnabled = {micEnabled}
-            setMicEnabled = {setMicEnabled}
-            speechRecognition = {speechRecognition}
-            setSpeechRecognition = {setSpeechRecognition}
-          />
+        <div className={styles.chatContainer}>
+          <div className={styles.topLine} />
+          <div className={styles.bottomLine} />
+          <div className={styles.scrollContainer}>
+            <Chat
+              micEnabled={micEnabled}
+              setMicEnabled={setMicEnabled}
+              speechRecognition={speechRecognition}
+              setSpeechRecognition={setSpeechRecognition}
+              lipSync={lipSync}
+            />
+          </div>
         </div>
       </div>
-    </div>
     </Fragment>
   )
 }

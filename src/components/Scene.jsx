@@ -1,91 +1,167 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect } from "react"
 import * as THREE from "three"
 import { SceneContext } from "./SceneContext"
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { CAMERA_TO_PLANE_DISTANCE, PLANE_COLOR, PLANE_HEIGHT, raycaster, tempColor, tempVec2 } from "../library/constants"
+import { getBone, getCameraFovToFitScreen } from "../library/common"
+
+
+let isFirstRender = true
+let prevCharacterModel = null
 
 export default function Scene({ characterModel }) {
-  const { scene, setMousePosition, setCamera } =
-    useContext(SceneContext)
-
-  const handleMouseMove = (event) => {
-    setMousePosition({ x: event.x, y: event.y })
-  }
+  const { scene, setCamera } = useContext(SceneContext)
 
   useEffect(() => {
-    window.addEventListener("mousemove", handleMouseMove)
-    return () => window.removeEventListener("mousemove", handleMouseMove)
-  }, [handleMouseMove])
+    console.log('Scene: isFirstRender: ', isFirstRender)
+    console.log('Scene: characterModel: ', characterModel)
 
-  let loaded = false
-  let [isLoaded, setIsLoaded] = useState(false)
+    if (isFirstRender) {
+      // add a camera to the scene
+      const camera = new THREE.PerspectiveCamera(
+        30,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000,
+      )
+      setCamera(camera)
 
-  useEffect(() => {
-    // hacky prevention of double render
-    if (loaded || isLoaded) return
-    setIsLoaded(true)
-    loaded = true
+      // find editor-scene canvas
+      const canvasRef = document.getElementById("editor-scene")
 
-    characterModel.scene.position.set(-.4, .1, 0)
-    // rotate 180 degrees
-    characterModel.scene.rotation.y = Math.PI
+      // create a new renderer
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvasRef,
+        antialias: true,
+        alpha: true,
+        preserveDrawingBuffer: true,
+      })
 
-    scene.add(characterModel.scene)
+      const handleWindowResize = () => {
+        renderer.setSize(window.innerWidth, window.innerHeight)
+        camera.aspect = window.innerWidth / window.innerHeight
+        camera.updateProjectionMatrix()
+        // TODO(Demon): Resize plane width and height
+      }
 
-    // add a camera to the scene
-    const camera = new THREE.PerspectiveCamera(
-      30,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000,
-    )
+      // add an eventlistener to resize the canvas when window changes
+      window.addEventListener("resize", handleWindowResize)
 
-    setCamera(camera)
-    // set the camera position
-    camera.position.set(0, 1.3, 2)
-
-    // find editor-scene canvas
-    const canvasRef = document.getElementById("editor-scene")
-
-    // create a new renderer
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef,
-      antialias: true,
-      alpha: true,
-      preserveDrawingBuffer: true,
-    })
-
-    const handleResize = () => {
+      // set the renderer size
       renderer.setSize(window.innerWidth, window.innerHeight)
-      camera.aspect = window.innerWidth / window.innerHeight
+
+      // set the renderer pixel ratio
+      renderer.setPixelRatio(window.devicePixelRatio)
+
+      // set the renderer output encoding
+      renderer.outputEncoding = THREE.sRGBEncoding
+
+      // To test easily
+      const orbitControls = new OrbitControls(camera, renderer.domElement)
+      // TODO(Demon): Set plane position and rotation dynamically when enabling the following options
+      camera.position.set(.4, 1.2, 2)
+      orbitControls.target.set(.4, 1.2, 2)
+      // orbitControls.enableZoom = false
+      // orbitControls.enableRotate = false
+      // orbitControls.enablePan = false
+
+      // Add plane
+      const planeWidth = camera.aspect * PLANE_HEIGHT
+      const planeMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(planeWidth, PLANE_HEIGHT),
+        new THREE.MeshStandardMaterial({
+          color: tempColor.clone().set(PLANE_COLOR),
+          transparent: true,
+          opacity: 0,
+        })
+      )
+      planeMesh.position.copy(camera.position.clone().setZ(camera.position.z - CAMERA_TO_PLANE_DISTANCE))
+      camera.fov = getCameraFovToFitScreen(CAMERA_TO_PLANE_DISTANCE * 0.8, PLANE_HEIGHT)
       camera.updateProjectionMatrix()
+      scene.add(planeMesh)
+
+      // Ray casting
+      const pointer = tempVec2.clone().set(0, 0)
+      let intersection
+
+      const updatePointer = (event) => {
+        const rect = renderer.domElement.getBoundingClientRect()
+        pointer.x = (((event.clientX - rect.left) / rect.width) * 2) - 1
+        pointer.y = ((-(event.clientY - rect.top) / rect.height) * 2) + 1
+      }
+
+      const updateIntersectPoint = () => {
+        const intersections = []
+        raycaster.setFromCamera(pointer, camera)
+        raycaster.intersectObjects([planeMesh], true, intersections)
+        if (intersections.length > 0) {
+          intersection = intersections[0]
+        } else {
+          intersection = undefined
+        }
+      }
+
+      const lookAtPointer = (bone, pointer) => {
+        const direcVec = bone.position.clone().sub(pointer.clone())
+        const target = bone.position.clone().add(direcVec.clone())
+        target.y += 2.25
+        bone.lookAt(target.clone())
+      }
+
+      const headBone = getBone(characterModel, 'head')
+      const leftEyeBone = getBone(characterModel, 'leftEye')
+      const rightEyeBone = getBone(characterModel, 'rightEye')
+
+      const handleMouseMove = (event) => {
+        updatePointer(event)
+        updateIntersectPoint()
+        if (intersection && headBone) {
+          lookAtPointer(headBone, intersection.point.clone())
+          lookAtPointer(leftEyeBone, intersection.point.clone())
+          lookAtPointer(rightEyeBone, intersection.point.clone())
+        } else {
+          lookAtPointer(headBone, planeMesh.position.clone())
+          lookAtPointer(leftEyeBone, planeMesh.position.clone())
+          lookAtPointer(rightEyeBone, planeMesh.position.clone())
+        }
+      }
+
+      // window.addEventListener("mousemove", handleMouseMove)
+
+      // start animation frame loop to render
+      const animate = () => {
+        requestAnimationFrame(animate)
+        renderer.render(scene, camera)
+        orbitControls.update()
+      }
+
+      // start the animation loop
+      animate()
     }
 
-    // add an eventlistener to resize the canvas when window changes
-    window.addEventListener("resize", handleResize)
+    {
+      if (prevCharacterModel && prevCharacterModel !== characterModel) {
+        console.log('character is different')
+        scene.remove(prevCharacterModel.scene)
+      }
 
-    // set the renderer size
-    renderer.setSize(window.innerWidth, window.innerHeight)
+      // characterModel.scene.traverse((child) => {
+      //   if (child.type === 'Bone') {
+      //     if (child.name === 'neck') {
+      //       child.add(new THREE.AxesHelper(10))
+      //       child.parent.add(new THREE.AxesHelper(10))
+      //     }
+      //   }
+      // })
 
-    // set the renderer pixel ratio
-    renderer.setPixelRatio(window.devicePixelRatio)
+      // characterModel.scene.rotation.y = Math.PI
 
-    // set the renderer output encoding
-    renderer.outputEncoding = THREE.sRGBEncoding
-
-    // start animation frame loop to render
-    const animate = () => {
-      requestAnimationFrame(animate)
-      renderer.render(scene, camera)
+      scene.add(characterModel.scene)
     }
 
-    // start the animation loop
-    animate()
-
-    return () => {
-      removeEventListener("mousemove", handleMouseMove)
-      removeEventListener("resize", handleMouseMove)
-      if(characterModel) scene.remove(characterModel)
-    }
-  }, [])
+    prevCharacterModel = characterModel
+    isFirstRender = false
+  }, [characterModel])
 
   return <></>
 }
